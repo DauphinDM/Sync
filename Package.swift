@@ -5,7 +5,7 @@ let package = Package(
     name: "Sync",
     platforms: [.iOS("17.0")],
     products: [
-        .executable(name: "Sync", targets: ["Sync"]),
+        .executable(name: "SyncApp", targets: ["Sync"]),
     ],
     dependencies: [
         .package(url: "https://github.com/anti-ltd/iUX-iOS", branch: "main"),
@@ -16,10 +16,7 @@ let package = Package(
             dependencies: [
                 .product(name: "iUXiOS", package: "iUX-ios")
             ],
-            path: "Sync",
-            swiftSettings: [
-                .unsafeFlags(["-Xfrontend", "-warn-long-expression-type-checking=100"])
-            ]
+            path: "Sync"
         ),
     ]
 )
