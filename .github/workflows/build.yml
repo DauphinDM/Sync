@@ -20,13 +20,14 @@ jobs:
 
     - name: Build and Archive
       run: |
-        # In a pure SPM repo, xcodebuild -archive -workspace . often fails because 
-        # the auto-generated 'Sync' scheme is not configured for archiving by default.
-        # We switch back to 'xcodebuild build' which is more predictable for SPM-based 
-        # iOS apps in CI, then manually bundle the result from the build directory.
-        xcodebuild build \
+        # In a pure SPM project, xcodebuild -archive -workspace . is the standard way 
+        # to force scheme discovery. We target 'generic/platform=iOS Simulator' 
+        # to ensure stability in unsigned CI environments.
+        xcodebuild archive \
+          -workspace . \
           -scheme Sync \
           -destination "generic/platform=iOS Simulator" \
+          -archivePath build/Sync.xcarchive \
           -derivedDataPath build/DerivedData \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
@@ -35,23 +36,26 @@ jobs:
     - name: Create IPA
       run: |
         mkdir -p build/Payload
-        # Locate the compiled .app bundle in the DerivedData directory.
-        APP_PATH=$(find build/DerivedData -name "Sync.app" -type d | head -n 1)
+        # Locate the compiled .app bundle. 
+        # For SPM projects, xcodebuild places it in the Products/Applications dir of the archive.
+        APP_PATH=$(find build/Sync.xcarchive/Products/Applications -name "*.app" -type d | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: Sync.app not found in DerivedData."
-          find build/DerivedData -maxdepth 4
+          echo "Error: Sync.app not found in archive. Listing archive contents for diagnosis:"
+          find build/Sync.xcarchive -maxdepth 4
           exit 1
         fi
         
         echo "Found app at $APP_PATH"
         cp -r "$APP_PATH" build/Payload/
         
-        # Ensure a valid Info.plist exists (sometimes missing in pure SPM builds)
+        # Pure SPM builds often lack a generated Info.plist in the bundle.
+        # We inject a minimal one if missing to ensure the IPA is valid.
         if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
             echo "Injecting mandatory Info.plist"
             cat <<EOF > "build/Payload/Sync.app/Info.plist"
             <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
             <plist version="1.0">
             <dict>
                 <key>CFBundleExecutable</key><string>Sync</string>
