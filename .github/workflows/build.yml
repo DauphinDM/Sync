@@ -20,45 +20,38 @@ jobs:
 
     - name: Build and Archive
       run: |
-        # For a pure SwiftPM project, we use 'xcodebuild archive' with the -path '.'
-        # but we must ensure we target the correct destination for an unsigned CI build.
-        # Archiving for 'generic/platform=iOS' requires signing, so we archive for 
-        # 'generic/platform=iOS Simulator' which is a battle-tested way to get a 
-        # compiled .app bundle in CI without certificates.
-        xcodebuild archive \
-          -workspace . \
+        # In a pure SPM repo, xcodebuild -archive -workspace . often fails because 
+        # the auto-generated 'Sync' scheme is not configured for archiving by default.
+        # We switch back to 'xcodebuild build' which is more predictable for SPM-based 
+        # iOS apps in CI, then manually bundle the result from the build directory.
+        xcodebuild build \
           -scheme Sync \
           -destination "generic/platform=iOS Simulator" \
-          -archivePath build/Sync.xcarchive \
+          -derivedDataPath build/DerivedData \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-    - name: Export IPA
+    - name: Create IPA
       run: |
         mkdir -p build/Payload
-        # Locate the compiled .app bundle in the archive's Products directory.
-        # This is where xcodebuild places the primary product for an archive.
-        APP_PATH=$(find build/Sync.xcarchive/Products/Applications -name "*.app" -type d | head -n 1)
+        # Locate the compiled .app bundle in the DerivedData directory.
+        APP_PATH=$(find build/DerivedData -name "Sync.app" -type d | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: No .app bundle found in the archive's Products directory."
-          # Diagnostic: list the archive contents to see what was actually produced.
-          find build/Sync.xcarchive -maxdepth 4
+          echo "Error: Sync.app not found in DerivedData."
+          find build/DerivedData -maxdepth 4
           exit 1
         fi
         
-        echo "Found .app at $APP_PATH"
+        echo "Found app at $APP_PATH"
         cp -r "$APP_PATH" build/Payload/
         
-        # In an SPM-to-iOS build, the Info.plist is often generated automatically
-        # by xcodebuild. We check for it, and only if missing do we provide a fallback.
-        if [ ! -f "build/Payload/*.app/Info.plist" ]; then
-            APP_NAME=$(basename build/Payload/*.app)
-            echo "Injecting fallback Info.plist for $APP_NAME"
-            cat <<EOF > "build/Payload/$APP_NAME/Info.plist"
+        # Ensure a valid Info.plist exists (sometimes missing in pure SPM builds)
+        if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
+            echo "Injecting mandatory Info.plist"
+            cat <<EOF > "build/Payload/Sync.app/Info.plist"
             <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
             <plist version="1.0">
             <dict>
                 <key>CFBundleExecutable</key><string>Sync</string>
@@ -68,6 +61,7 @@ jobs:
                 <key>CFBundleShortVersionString</key><string>1.0</string>
                 <key>CFBundleVersion</key><string>1</string>
                 <key>MinimumOSVersion</key><string>17.0</string>
+                <key>UILaunchScreen</key><dict/>
             </dict>
             </plist>
 EOF
