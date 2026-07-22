@@ -1,4 +1,5 @@
 import SwiftUI
+import iUXiOS
 
 @main
 struct SyncApp: App {
