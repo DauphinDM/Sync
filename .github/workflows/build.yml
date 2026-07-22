@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
     
     steps:
     - name: Checkout
@@ -16,7 +16,7 @@ jobs:
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: latest-stable
+        xcode-version: '16.1'
 
     - name: Resolve Dependencies
       run: swift package resolve
@@ -28,14 +28,21 @@ jobs:
           -scheme Sync \
           -destination "generic/platform=iOS" \
           -archivePath build/Sync.xcarchive \
-          CODE_SIGNING_ALLOWED=NO
+          -derivedDataPath build/DerivedData \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          AD_HOC_CODE_SIGNING_ALLOWED=YES
 
     - name: Export IPA
       run: |
         mkdir -p build/Payload
-        cp -r build/Sync.xcarchive/Products/usr/local/bin/Sync build/Payload/ || \
-        cp -r build/Sync.xcarchive/Products/Applications/Sync.app build/Payload/ || \
-        find build/Sync.xcarchive -name "*.app" -exec cp -r {} build/Payload/ \;
+        # Find the .app in the archive and copy it to Payload
+        APP_PATH=$(find build/Sync.xcarchive -name "*.app" | head -n 1)
+        if [ -z "$APP_PATH" ]; then
+          echo "No .app found in archive"
+          exit 1
+        fi
+        cp -r "$APP_PATH" build/Payload/
         cd build
         zip -r Sync.ipa Payload
         

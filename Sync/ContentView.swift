@@ -2,34 +2,43 @@ import SwiftUI
 import iUXiOS
 
 struct ContentView: View {
+    let lyrics = [
+        "The silence is so loud tonight",
+        "Wait for the light to fade",
+        "In the shadow of the melody"
+    ]
+    
     var body: some View {
         ZStack {
-            // Using a gloomy base color
-            Color(red: 0.1, green: 0.1, blue: 0.12)
+            // Gloomy theme base
+            Color(red: 0.05, green: 0.05, blue: 0.07)
                 .ignoresSafeArea()
             
-            VStack(spacing: 30) {
+            VStack {
                 Spacer()
                 
-                // Lyric lines with different opacities
-                LyricLine(text: "The silence is so loud tonight", opacity: 1.0)
-                LyricLine(text: "Wait for the light to fade", opacity: 0.6)
-                LyricLine(text: "In the shadow of the melody", opacity: 0.3)
+                // Using iUXiOS's FlowLayout to wrap lyric fragments if needed
+                FlowLayout(spacing: 12, lineSpacing: 20) {
+                    ForEach(0..<lyrics.count, id: \.self) { index in
+                        LyricLine(text: lyrics[index], opacity: index == 0 ? 1.0 : (index == 1 ? 0.6 : 0.3))
+                    }
+                }
+                .padding(.horizontal, 40)
                 
                 Spacer()
                 
                 // Simple Player Controls
-                HStack(spacing: 50) {
+                HStack(spacing: 60) {
                     Image(systemName: "backward.fill")
                     Image(systemName: "play.fill")
                         .font(.system(size: 44))
                     Image(systemName: "forward.fill")
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.white.opacity(0.8))
                 
                 Spacer()
+                    .frame(height: 50)
             }
-            .padding()
         }
     }
 }
@@ -43,6 +52,7 @@ struct LyricLine: View {
             .font(.system(size: 28, weight: .bold, design: .rounded))
             .foregroundColor(.white.opacity(opacity))
             .multilineTextAlignment(.center)
-            .blur(radius: (1.0 - opacity) * 3)
+            .blur(radius: (1.0 - opacity) * 2.5)
+            .animation(.easeInOut, value: opacity)
     }
 }
