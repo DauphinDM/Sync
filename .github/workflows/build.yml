@@ -18,10 +18,13 @@ jobs:
       with:
         xcode-version: '16.1'
 
-    - name: Build with SwiftPM
+    - name: Resolve Dependencies
+      run: xcodebuild -resolvePackageDependencies -scheme Sync -destination "generic/platform=iOS Simulator"
+
+    - name: Build with xcodebuild
       run: |
-        # Use the standard xcodebuild command for SPM-based iOS apps
-        # This is more robust for dependency resolution than bare 'swift build'
+        # Use a flat build structure and explicitly target the simulator to ensure
+        # all dependencies (like iUX-iOS) are correctly resolved and linked.
         xcodebuild build \
           -scheme Sync \
           -destination "generic/platform=iOS Simulator" \
@@ -37,19 +40,21 @@ jobs:
         APP_PATH=$(find build/DerivedData -name "Sync.app" -type d | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: Sync.app not found in DerivedData."
-          find build/DerivedData -maxdepth 4
+          echo "Error: Sync.app not found in DerivedData. Listing build artifacts:"
+          find build/DerivedData -maxdepth 5
           exit 1
         fi
         
         echo "Found app at $APP_PATH"
         cp -r "$APP_PATH" build/Payload/
         
-        # Ensure a valid Info.plist exists
+        # In a pure SPM build, Info.plist is often not created in the bundle by default.
+        # We must provide a valid one for the IPA to be installable.
         if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
             echo "Injecting mandatory Info.plist"
             cat <<EOF > "build/Payload/Sync.app/Info.plist"
             <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
             <plist version="1.0">
             <dict>
                 <key>CFBundleExecutable</key><string>Sync</string>
@@ -58,8 +63,13 @@ jobs:
                 <key>CFBundlePackageType</key><string>APPL</string>
                 <key>CFBundleShortVersionString</key><string>1.0</string>
                 <key>CFBundleVersion</key><string>1</string>
+                <key>LSRequiresIPhoneOS</key><true/>
                 <key>MinimumOSVersion</key><string>17.0</string>
                 <key>UILaunchScreen</key><dict/>
+                <key>UISupportedInterfaceOrientations</key>
+                <array>
+                    <string>UIInterfaceOrientationPortrait</string>
+                </array>
             </dict>
             </plist>
 EOF
