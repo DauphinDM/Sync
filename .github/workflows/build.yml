@@ -18,17 +18,26 @@ jobs:
       with:
         xcode-version: '16.1'
 
+    - name: Debug Environment
+      run: |
+        xcodebuild -list
+        xcodebuild -showsdks
+        swift --version
+
     - name: Resolve Dependencies
-      run: xcodebuild -resolvePackageDependencies -scheme Sync -destination "generic/platform=iOS Simulator"
+      run: |
+        # Explicitly resolve dependencies first to catch resolution errors early
+        xcodebuild -resolvePackageDependencies -scheme Sync -destination "generic/platform=iOS Simulator"
 
     - name: Build with xcodebuild
       run: |
-        # Use a flat build structure and explicitly target the simulator to ensure
-        # all dependencies (like iUX-iOS) are correctly resolved and linked.
+        # Use a flat build structure and explicitly target the simulator.
+        # Added COMPILER_INDEX_STORE_ENABLE=NO to speed up CI and reduce potential IO issues.
         xcodebuild build \
           -scheme Sync \
           -destination "generic/platform=iOS Simulator" \
           -derivedDataPath build/DerivedData \
+          COMPILER_INDEX_STORE_ENABLE=NO \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           AD_HOC_CODE_SIGNING_ALLOWED=YES
@@ -36,20 +45,20 @@ jobs:
     - name: Create IPA
       run: |
         mkdir -p build/Payload
-        # Locate the compiled .app bundle in the DerivedData directory.
-        APP_PATH=$(find build/DerivedData -name "Sync.app" -type d | head -n 1)
+        # Use a more aggressive search for the .app bundle in the build folder
+        APP_PATH=$(find build/DerivedData -name "Sync.app" -type d -path "*/Build/Products/*" | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
-          echo "Error: Sync.app not found in DerivedData. Listing build artifacts:"
-          find build/DerivedData -maxdepth 5
+          echo "Error: Sync.app not found. Full build directory listing for diagnosis:"
+          find build/DerivedData -maxdepth 8
           exit 1
         fi
         
         echo "Found app at $APP_PATH"
         cp -r "$APP_PATH" build/Payload/
         
-        # In a pure SPM build, Info.plist is often not created in the bundle by default.
-        # We must provide a valid one for the IPA to be installable.
+        # In pure SPM builds, the Info.plist is often missing from the binary bundle.
+        # We MUST provide a valid one for the IPA to be considered a valid iOS app.
         if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
             echo "Injecting mandatory Info.plist"
             cat <<EOF > "build/Payload/Sync.app/Info.plist"
