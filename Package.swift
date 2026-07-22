@@ -14,7 +14,7 @@ let package = Package(
         .executableTarget(
             name: "Sync",
             dependencies: [
-                .product(name: "iUXiOS", package: "iUX-ios")
+                .product(name: "iUXiOS", package: "iUX-iOS")
             ],
             path: "Sync"
         ),
