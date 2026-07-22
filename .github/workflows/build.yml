@@ -20,10 +20,8 @@ jobs:
 
     - name: Build and Archive
       run: |
-        # Using xcodebuild archive on the folder (.) is the standard CI path for SwiftPM apps
-        # that need to link iOS frameworks like SwiftUI and iUXiOS properly.
+        # Use a standard build path for SwiftPM on iOS Simulator
         xcodebuild archive \
-          -packageSync . \
           -scheme Sync \
           -destination "generic/platform=iOS Simulator" \
           -archivePath build/Sync.xcarchive \
