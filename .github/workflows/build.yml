@@ -20,12 +20,13 @@ jobs:
 
     - name: Build and Archive
       run: |
+        # Use -allowProvisioningDeviceRegistration as a safeguard for CI
         xcodebuild archive \
-          -packageSync . \
           -scheme Sync \
           -destination "generic/platform=iOS" \
           -archivePath build/Sync.xcarchive \
           -derivedDataPath build/DerivedData \
+          -allowProvisioningDeviceRegistration \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           AD_HOC_CODE_SIGNING_ALLOWED=YES
@@ -33,14 +34,13 @@ jobs:
     - name: Export IPA
       run: |
         mkdir -p build/Payload
-        # Find the .app in the archive and copy it to Payload
-        # SwiftPM executables in archives often end up in unusual paths like usr/local/bin or Products/Applications
-        APP_PATH=$(find build/Sync.xcarchive -name "*.app" | head -n 1)
+        # Locate the .app bundle in the archive
+        APP_PATH=$(find build/Sync.xcarchive -name "*.app" -type d | head -n 1)
         if [ -z "$APP_PATH" ]; then
           echo "No .app found in archive. Checking for binary..."
           BINARY_PATH=$(find build/Sync.xcarchive -type f -perm +111 -name "Sync" | head -n 1)
           if [ -n "$BINARY_PATH" ]; then
-            echo "Found binary at $BINARY_PATH, creating dummy .app wrapper"
+            echo "Found binary at $BINARY_PATH, creating app wrapper"
             mkdir -p build/Payload/Sync.app
             cp "$BINARY_PATH" build/Payload/Sync.app/Sync
           else
