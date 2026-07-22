@@ -16,7 +16,10 @@ let package = Package(
             dependencies: [
                 .product(name: "iUXiOS", package: "iUX-ios")
             ],
-            path: "Sync"
+            path: "Sync",
+            swiftSettings: [
+                .unsafeFlags(["-Xfrontend", "-warn-long-expression-type-checking=100"])
+            ]
         ),
     ]
 )
