@@ -21,7 +21,10 @@ jobs:
     - name: Build with SwiftPM
       run: |
         # Direct swift build targeting the iOS simulator for stable unsigned CI compilation.
-        swift build -c release --triple arm64-apple-ios17.0-simulator
+        # Use -Xswiftc -sdk to ensure we pick up the iPhoneSimulator SDK explicitly.
+        swift build -c release \
+          --triple arm64-apple-ios17.0-simulator \
+          -Xswiftc "-sdk" -Xswiftc "$(xcrun --sdk iphonesimulator --show-sdk-path)"
         
     - name: Create IPA
       run: |
