@@ -18,71 +18,55 @@ jobs:
       with:
         xcode-version: '16.1'
 
-    - name: Debug Environment
+    - name: Build with SwiftPM
       run: |
-        xcodebuild -list
-        xcodebuild -showsdks
-        swift --version
-
-    - name: Resolve Dependencies
-      run: |
-        # Explicitly resolve dependencies first to catch resolution errors early
-        xcodebuild -resolvePackageDependencies -scheme Sync -destination "generic/platform=iOS Simulator"
-
-    - name: Build with xcodebuild
-      run: |
-        # Use a flat build structure and explicitly target the simulator.
-        # Added COMPILER_INDEX_STORE_ENABLE=NO to speed up CI and reduce potential IO issues.
-        xcodebuild build \
-          -scheme Sync \
-          -destination "generic/platform=iOS Simulator" \
-          -derivedDataPath build/DerivedData \
-          COMPILER_INDEX_STORE_ENABLE=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          AD_HOC_CODE_SIGNING_ALLOWED=YES
+        # Pure SwiftPM build for iOS Simulator to bypass xcodebuild scheme/project friction.
+        # We explicitly pass the SDK path to ensure system frameworks (SwiftUI/UIKit) are found.
+        swift build -c release \
+          --triple arm64-apple-ios17.0-simulator \
+          -Xswiftc "-sdk" -Xswiftc "$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
     - name: Create IPA
       run: |
-        mkdir -p build/Payload
-        # Use a more aggressive search for the .app bundle in the build folder
-        APP_PATH=$(find build/DerivedData -name "Sync.app" -type d -path "*/Build/Products/*" | head -n 1)
+        mkdir -p build/Payload/Sync.app
         
-        if [ -z "$APP_PATH" ]; then
-          echo "Error: Sync.app not found. Full build directory listing for diagnosis:"
-          find build/DerivedData -maxdepth 8
+        # Determine the build path dynamically
+        BIN_PATH=$(swift build -c release --triple arm64-apple-ios17.0-simulator --show-bin-path)
+        
+        if [ ! -f "$BIN_PATH/Sync" ]; then
+          echo "Error: Binary not found at $BIN_PATH/Sync"
+          ls -R .build
           exit 1
         fi
         
-        echo "Found app at $APP_PATH"
-        cp -r "$APP_PATH" build/Payload/
+        echo "Found binary at $BIN_PATH/Sync"
+        cp "$BIN_PATH/Sync" build/Payload/Sync.app/Sync
         
-        # In pure SPM builds, the Info.plist is often missing from the binary bundle.
-        # We MUST provide a valid one for the IPA to be considered a valid iOS app.
-        if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
-            echo "Injecting mandatory Info.plist"
-            cat <<EOF > "build/Payload/Sync.app/Info.plist"
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
-            <plist version="1.0">
-            <dict>
-                <key>CFBundleExecutable</key><string>Sync</string>
-                <key>CFBundleIdentifier</key><string>com.dauphin.sync</string>
-                <key>CFBundleName</key><string>Sync</string>
-                <key>CFBundlePackageType</key><string>APPL</string>
-                <key>CFBundleShortVersionString</key><string>1.0</string>
-                <key>CFBundleVersion</key><string>1</string>
-                <key>LSRequiresIPhoneOS</key><true/>
-                <key>MinimumOSVersion</key><string>17.0</string>
-                <key>UILaunchScreen</key><dict/>
-                <key>UISupportedInterfaceOrientations</key>
-                <array>
-                    <string>UIInterfaceOrientationPortrait</string>
-                </array>
-            </dict>
-            </plist>
-EOF
-        fi
+        # Inject the mandatory Info.plist required for an iOS app bundle
+        cat <<EOF > build/Payload/Sync.app/Info.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key><string>Sync</string>
+            <key>CFBundleIdentifier</key><string>com.dauphin.sync</string>
+            <key>CFBundleName</key><string>Sync</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSRequiresIPhoneOS</key><true/>
+            <key>MinimumOSVersion</key><string>17.0</string>
+            <key>UILaunchScreen</key><dict/>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+                <string>UIInterfaceOrientationPortrait</string>
+            </array>
+        </dict>
+        </plist>
+        EOF
+        
+        # Pure SPM builds don't create the PkgInfo file needed for some installers
+        echo "APPL????" > build/Payload/Sync.app/PkgInfo
         
         cd build
         zip -r Sync.ipa Payload
