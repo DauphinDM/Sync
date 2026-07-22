@@ -18,58 +18,53 @@ jobs:
       with:
         xcode-version: '16.1'
 
-    - name: Build and Archive
+    - name: Build with SwiftPM
       run: |
-        # In a pure SPM project, xcodebuild -archive -workspace . is the standard way 
-        # to force scheme discovery. We target 'generic/platform=iOS Simulator' 
-        # to ensure stability in unsigned CI environments.
-        xcodebuild archive \
-          -workspace . \
-          -scheme Sync \
-          -destination "generic/platform=iOS Simulator" \
-          -archivePath build/Sync.xcarchive \
-          -derivedDataPath build/DerivedData \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO \
-          AD_HOC_CODE_SIGNING_ALLOWED=YES
-
+        # Direct swift build targeting the iOS simulator for stable unsigned CI compilation.
+        swift build -c release --triple arm64-apple-ios17.0-simulator
+        
     - name: Create IPA
       run: |
-        mkdir -p build/Payload
-        # Locate the compiled .app bundle. 
-        # For SPM projects, xcodebuild places it in the Products/Applications dir of the archive.
-        APP_PATH=$(find build/Sync.xcarchive/Products/Applications -name "*.app" -type d | head -n 1)
-        
-        if [ -z "$APP_PATH" ]; then
-          echo "Error: Sync.app not found in archive. Listing archive contents for diagnosis:"
-          find build/Sync.xcarchive -maxdepth 4
+        mkdir -p build/Payload/Sync.app
+        # Locate the binary produced by swift build
+        BINARY_PATH=$(swift build -c release --triple arm64-apple-ios17.0-simulator --show-bin-path)/Sync
+        if [ ! -f "$BINARY_PATH" ]; then
+          echo "Error: Binary not found at $BINARY_PATH"
           exit 1
         fi
+        cp "$BINARY_PATH" build/Payload/Sync.app/Sync
         
-        echo "Found app at $APP_PATH"
-        cp -r "$APP_PATH" build/Payload/
-        
-        # Pure SPM builds often lack a generated Info.plist in the bundle.
-        # We inject a minimal one if missing to ensure the IPA is valid.
-        if [ ! -f "build/Payload/Sync.app/Info.plist" ]; then
-            echo "Injecting mandatory Info.plist"
-            cat <<EOF > "build/Payload/Sync.app/Info.plist"
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
-            <plist version="1.0">
-            <dict>
-                <key>CFBundleExecutable</key><string>Sync</string>
-                <key>CFBundleIdentifier</key><string>com.dauphin.sync</string>
-                <key>CFBundleName</key><string>Sync</string>
-                <key>CFBundlePackageType</key><string>APPL</string>
-                <key>CFBundleShortVersionString</key><string>1.0</string>
-                <key>CFBundleVersion</key><string>1</string>
-                <key>MinimumOSVersion</key><string>17.0</string>
-                <key>UILaunchScreen</key><dict/>
-            </dict>
-            </plist>
-EOF
-        fi
+        # Inject the mandatory Info.plist for an iOS app bundle
+        cat <<EOF > build/Payload/Sync.app/Info.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>Sync</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.dauphin.sync</string>
+            <key>CFBundleName</key>
+            <string>Sync</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+            <key>MinimumOSVersion</key>
+            <string>17.0</string>
+            <key>UILaunchScreen</key>
+            <dict/>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+                <string>UIInterfaceOrientationPortrait</string>
+            </array>
+        </dict>
+        </plist>
+        EOF
         
         cd build
         zip -r Sync.ipa Payload
