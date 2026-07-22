@@ -5,7 +5,7 @@ let package = Package(
     name: "Sync",
     platforms: [.iOS("17.0")],
     products: [
-        .executable(name: "SyncApp", targets: ["Sync"]),
+        .executable(name: "Sync", targets: ["Sync"]),
     ],
     dependencies: [
         .package(url: "https://github.com/anti-ltd/iUX-iOS", branch: "main"),

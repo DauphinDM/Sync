@@ -18,17 +18,17 @@ jobs:
       with:
         xcode-version: '16.1'
 
-    - name: Resolve Dependencies
-      run: swift package resolve
-
     - name: Build and Archive
       run: |
+        # Use -allowProvisioningDeviceRegistration as a CI safeguard.
+        # We target the 'Sync' scheme (now aligned with the executable name).
+        # We remove -packageSync which caused instant failures in some environments.
         xcodebuild archive \
-          -packageSync . \
-          -scheme SyncApp \
+          -scheme Sync \
           -destination "generic/platform=iOS" \
           -archivePath build/Sync.xcarchive \
           -derivedDataPath build/DerivedData \
+          -allowProvisioningDeviceRegistration \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGNING_REQUIRED=NO \
           AD_HOC_CODE_SIGNING_ALLOWED=YES
@@ -36,18 +36,19 @@ jobs:
     - name: Export IPA
       run: |
         mkdir -p build/Payload
-        # Locate the output bundle. SwiftPM executables in archives are often found in unusual spots.
-        # We search specifically for the .app directory or the binary named 'Sync'.
+        # Locate the build product.
+        # Since this is a SwiftPM executable, xcodebuild places it in the archive.
+        # We search specifically for a .app directory or the binary 'Sync'.
         APP_PATH=$(find build/Sync.xcarchive -name "*.app" -type d | head -n 1)
         if [ -z "$APP_PATH" ]; then
-          echo "No .app found in archive. Checking for executable..."
+          echo "No .app found in archive. Checking for binary..."
           BINARY_PATH=$(find build/Sync.xcarchive -type f -perm +111 -name "Sync" | head -n 1)
           if [ -n "$BINARY_PATH" ]; then
             echo "Found binary at $BINARY_PATH, wrapping in app container"
             mkdir -p build/Payload/Sync.app
             cp "$BINARY_PATH" build/Payload/Sync.app/Sync
           else
-            echo "Failed to find any build products"
+            echo "Failed to find any build products."
             exit 1
           fi
         else
