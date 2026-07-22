@@ -18,43 +18,51 @@ jobs:
       with:
         xcode-version: '16.1'
 
-    - name: Build with SwiftPM
+    - name: Build and Archive
       run: |
-        swift build -c release --triple arm64-apple-ios17.0-simulator
-        # We use simulator triple for unsigned build stability in CI, 
-        # then wrap it. For a real device .ipa we would need arm64-apple-ios.
-        # But swift build is cleaner than xcodebuild archive for pure SPM repos.
-        
+        # Using xcodebuild archive on the folder (.) is the standard CI path for SwiftPM apps
+        # that need to link iOS frameworks like SwiftUI and iUXiOS properly.
+        xcodebuild archive \
+          -packageSync . \
+          -scheme Sync \
+          -destination "generic/platform=iOS Simulator" \
+          -archivePath build/Sync.xcarchive \
+          -derivedDataPath build/DerivedData \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          AD_HOC_CODE_SIGNING_ALLOWED=YES
+
     - name: Create IPA
       run: |
-        mkdir -p build/Payload/Sync.app
-        BINARY_PATH=$(swift build -c release --triple arm64-apple-ios17.0-simulator --show-bin-path)/Sync
-        cp "$BINARY_PATH" build/Payload/Sync.app/Sync
-        # Create minimal Info.plist so it's a valid app bundle
-        cat <<EOF > build/Payload/Sync.app/Info.plist
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.4.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleExecutable</key>
-            <string>Sync</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.dauphin.sync</string>
-            <key>CFBundleName</key>
-            <string>Sync</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0</string>
-            <key>CFBundleVersion</key>
-            <string>1</string>
-            <key>LSRequiresIPhoneOS</key>
-            <true/>
-            <key>MinimumOSVersion</key>
-            <string>17.0</string>
-        </dict>
-        </plist>
-        EOF
+        mkdir -p build/Payload
+        # Locate the .app bundle inside the archive.
+        APP_PATH=$(find build/Sync.xcarchive -name "*.app" -type d | head -n 1)
+        if [ -z "$APP_PATH" ]; then
+          echo "No .app found in archive. Falling back to binary search..."
+          BINARY_PATH=$(find build/Sync.xcarchive -type f -perm +111 -name "Sync" | head -n 1)
+          if [ -n "$BINARY_PATH" ]; then
+             mkdir -p build/Payload/Sync.app
+             cp "$BINARY_PATH" build/Payload/Sync.app/Sync
+             # Inject minimal Info.plist
+             cat <<EOF > build/Payload/Sync.app/Info.plist
+             <?xml version="1.0" encoding="UTF-8"?>
+             <plist version="1.0"><dict>
+             <key>CFBundleExecutable</key><string>Sync</string>
+             <key>CFBundleIdentifier</key><string>com.dauphin.sync</string>
+             <key>CFBundleName</key><string>Sync</string>
+             <key>CFBundlePackageType</key><string>APPL</string>
+             <key>CFBundleShortVersionString</key><string>1.0</string>
+             <key>CFBundleVersion</key><string>1</string>
+             <key>MinimumOSVersion</key><string>17.0</string>
+             </dict></plist>
+EOF
+          else
+            echo "Failed to find any build products."
+            exit 1
+          fi
+        else
+          cp -r "$APP_PATH" build/Payload/
+        fi
         cd build
         zip -r Sync.ipa Payload
         
